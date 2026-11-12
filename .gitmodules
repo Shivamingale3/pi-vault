@@ -1,0 +1,6 @@
+[submodule "backend"]
+	path = backend
+	url = git@github.com:Shivamingale3/pivault-backend.git
+[submodule "pwa"]
+	path = pwa
+	url = git@github.com:Shivamingale3/pivault-pwa.git
