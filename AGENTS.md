@@ -97,6 +97,13 @@ Both must stay in place. Treat a missing header as a bug.
 - **Frontend rules that follow from the CSP**: no inline `<script>` or event-handler attributes, no `eval`/`new Function` in app code, no third-party scripts, fonts, images or API hosts, and the API is only called on the same origin (`/api`). If a feature genuinely needs a new source, stop and ask, because the change is made on the Pi.
 - Changing the header set means editing the Pi snippet (ask first) and updating this section in the same change.
 
+### Dependencies and the runtime image
+
+- `npm audit --omit=dev` must stay at 0 in both `backend/` and `pwa/`. Dev-only findings whose only suggested fix is a downgrade (typescript-eslint/minimatch, workbox-build, the shadcn CLI) are accepted.
+- The backend image ships production dependencies only (`npm prune --omit=dev` in the Dockerfile builder stage). Anything needed at runtime or at deploy time must be in `dependencies`. `prisma` is one on purpose: Jenkins runs `prisma migrate deploy` inside that image. Never move it back to `devDependencies`.
+- Bump `prisma`, `@prisma/client` and `@prisma/adapter-pg` together, to the same version. After a Prisma bump, check `uniqueViolationFields` in `backend/src/core/database/prismaErrors.ts`: Prisma 7.10 changed how unique violations are reported, which made a duplicate mobile look like a duplicate email. `backend/tests/unit/core/prisma-errors.test.ts` and the Postgres repository tests cover it.
+- The `shadcn` CLI is a `devDependency` in `pwa/` (its CSS is imported at build time only).
+
 ### Client IP and rate limiting
 
 - The API runs behind Cloudflare, cloudflared and nginx, so the TCP peer is always loopback. Rate limits must be keyed on the real client IP.
