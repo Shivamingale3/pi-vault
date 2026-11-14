@@ -95,6 +95,13 @@ Both must stay in place. Treat a missing header as a bug.
 - **Frontend rules that follow from the CSP**: no inline `<script>` or event-handler attributes, no `eval`/`new Function` in app code, no third-party scripts, fonts, images or API hosts, and the API is only called on the same origin (`/api`). If a feature genuinely needs a new source, stop and ask, because the change is made on the Pi.
 - Changing the header set means editing the Pi snippet (ask first) and updating this section in the same change.
 
+### Client IP and rate limiting
+
+- The API runs behind Cloudflare, cloudflared and nginx, so the TCP peer is always loopback. Rate limits must be keyed on the real client IP.
+- nginx (`/etc/nginx/sites-available/pivault`, `/api/` location) sets `X-Forwarded-For` to exactly one value: Cloudflare's `CF-Connecting-IP` when it is a valid IP, otherwise the peer address. It must never append (`$proxy_add_x_forwarded_for` makes every visitor `127.0.0.1`, one shared bucket) and never be empty (`LocalOnlyGuard` treats a missing `X-Forwarded-For` as "not proxied" and would let `/api/internal/*` through).
+- Express uses `trust proxy` 1, so `req.ip` is the last `X-Forwarded-For` entry. Do not change either side without the other. `backend/tests/integration/rate-limit-client-ip.test.ts` enforces the backend half.
+- Per-user limits (e.g. login attempts per account) are separate from this and must not rely on IP alone.
+
 ### Tech stack
 
 ### Frontend (/pwa)
