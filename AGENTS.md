@@ -75,6 +75,12 @@ GitHub Actions tests it, builds an ARM64 image tagged `sha-<first 7 chars of the
 - Commit or push code without my approval
 - Send any API response without the security headers, or add inline scripts, `eval`/`new Function`, or third-party hosts to the PWA (see "Security headers")
 
+### GitGuardian
+
+- Each submodule has a `.gitguardian.yaml` that skips test files only (`tests/**`, `*.test.ts(x)`, `src/test/**`). App code, config and docs are always scanned.
+- Dummy credentials are fine in tests (use obviously fake values like `Passw0rd!`). Never put a real secret in a test: the path ignore would hide it.
+- A fake secret outside tests (e.g. `.env.example` placeholders) gets `# ggignore` on the same line. Do not widen the ignored paths to silence a finding in real code: fix or rotate it.
+
 ### Features
 
 @FEATURES.md
