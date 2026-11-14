@@ -92,6 +92,7 @@ Both must stay in place. Treat a missing header as a bug.
 - **Static PWA**: nginx on the Pi sends the headers, from `/etc/nginx/snippets/pivault-security-headers.conf`, included in the `/`, `/index.html` and `/sw.js` locations of `/etc/nginx/sites-available/pivault`. It is not in any repo and is not deployed by CI. The policy is:
   - CSP: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`
   - `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Permissions-Policy` (camera, microphone, geolocation, payment off).
+- **CORS**: only the origin of `APP_URL` may read API responses (`allowedOrigins` in `App.ts`, tested in `backend/tests/integration/cors.test.ts`). Never use `cors()` with no options or a wildcard origin. Production is same-origin, so the PWA must call `/api` on its own origin.
 - **Frontend rules that follow from the CSP**: no inline `<script>` or event-handler attributes, no `eval`/`new Function` in app code, no third-party scripts, fonts, images or API hosts, and the API is only called on the same origin (`/api`). If a feature genuinely needs a new source, stop and ask, because the change is made on the Pi.
 - Changing the header set means editing the Pi snippet (ask first) and updating this section in the same change.
 
