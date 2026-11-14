@@ -83,6 +83,7 @@ GitHub Actions tests it, builds an ARM64 image tagged `sha-<first 7 chars of the
 
 - No cache, intentional since 3 users max. Sessions and reset tokens are read from Postgres.
 - No queue, intentional since 3 users max. Emails are sent in the request itself.
+- Account password is 8 to 16 characters (upper, lower, digit, special), intentional: the users must be able to remember it. Do not raise the maximum. The vault itself is protected by the separate recovery key (see SECURITY.md), not by this password.
 
 ### Security headers (API and static site)
 
@@ -95,6 +96,13 @@ Both must stay in place. Treat a missing header as a bug.
 - **CORS**: only the origin of `APP_URL` may read API responses (`allowedOrigins` in `App.ts`, tested in `backend/tests/integration/cors.test.ts`). Never use `cors()` with no options or a wildcard origin. Production is same-origin, so the PWA must call `/api` on its own origin.
 - **Frontend rules that follow from the CSP**: no inline `<script>` or event-handler attributes, no `eval`/`new Function` in app code, no third-party scripts, fonts, images or API hosts, and the API is only called on the same origin (`/api`). If a feature genuinely needs a new source, stop and ask, because the change is made on the Pi.
 - Changing the header set means editing the Pi snippet (ask first) and updating this section in the same change.
+
+### Dependencies and the runtime image
+
+- `npm audit --omit=dev` must stay at 0 in both `backend/` and `pwa/`. Dev-only findings whose only suggested fix is a downgrade (typescript-eslint/minimatch, workbox-build, the shadcn CLI) are accepted.
+- The backend image ships production dependencies only (`npm prune --omit=dev` in the Dockerfile builder stage). Anything needed at runtime or at deploy time must be in `dependencies`. `prisma` is one on purpose: Jenkins runs `prisma migrate deploy` inside that image. Never move it back to `devDependencies`.
+- Bump `prisma`, `@prisma/client` and `@prisma/adapter-pg` together, to the same version. After a Prisma bump, check `uniqueViolationFields` in `backend/src/core/database/prismaErrors.ts`: Prisma 7.10 changed how unique violations are reported, which made a duplicate mobile look like a duplicate email. `backend/tests/unit/core/prisma-errors.test.ts` and the Postgres repository tests cover it.
+- The `shadcn` CLI is a `devDependency` in `pwa/` (its CSS is imported at build time only).
 
 ### Client IP and rate limiting
 
