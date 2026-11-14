@@ -97,6 +97,19 @@ Both must stay in place. Treat a missing header as a bug.
 - **Frontend rules that follow from the CSP**: no inline `<script>` or event-handler attributes, no `eval`/`new Function` in app code, no third-party scripts, fonts, images or API hosts, and the API is only called on the same origin (`/api`). If a feature genuinely needs a new source, stop and ask, because the change is made on the Pi.
 - Changing the header set means editing the Pi snippet (ask first) and updating this section in the same change.
 
+### Emailed links: set password + verify email
+
+- The welcome email (and later forgot-password) carries `APP_URL/reset-password?key=<token>`. The PWA page `/reset-password` opens in a plain browser tab (it is in `PWA_BYPASS_PATHS`, keep it there; `ROUTES.resetPassword` is tested against it).
+- API (public, not under `/internal`): `POST /api/auth/password-links/validate` and `/complete`, bodies `{ token }` and `{ token, password }`. The token travels in the body only, never in a URL or query string, and is never logged. Responses are `Cache-Control: no-store`.
+- Every unknown, expired, spent or malformed token gets the same HTTP 400 with `INVALID_LINK_MESSAGE` ("This link is invalid or has expired"). The PWA matches that exact message (`pwa/src/constants/password-link.constants.ts`); change both sides together.
+- `complete` checks the token before hashing (a bad token must never cost an argon2 hash), then in ONE transaction deletes the token (compare-and-delete, so it is single-use even under races), sets the password hash and `passwordChangedAt`, sets `emailVerifiedAt` if empty, and deletes the user's session. Keep that atomic: it lives in `PrismaPasswordResetRepository.consumeToSetPassword`.
+- **Login (not built yet) MUST refuse users whose `emailVerifiedAt` is null.**
+- The password policy has one backend source, `backend/src/modules/user/password.schema.ts`, mirrored in `pwa/src/utils/password-rules.utils.ts`. Do not duplicate it elsewhere.
+- The PWA strips `?key=` from the address bar right after reading it and keeps the token in memory only. Never store it in storage or caches.
+- Rate limits: `PASSWORD_LINK_VALIDATE` and `PASSWORD_LINK_COMPLETE` in `ratelimits.constants.ts`. New public paths belong in `security-headers.test.ts`.
+- Expired tokens are swept whenever a new token is issued (no scheduler, by design).
+- The Pi nginx must serve `/reset-password` with the SPA fallback and must not block `/api/auth/*` (only `/api/internal/*` is blocked). Verify after deploy; changing it is a Pi change, ask first.
+
 ### Dependencies and the runtime image
 
 - `npm audit --omit=dev` must stay at 0 in both `backend/` and `pwa/`. Dev-only findings whose only suggested fix is a downgrade (typescript-eslint/minimatch, workbox-build, the shadcn CLI) are accepted.
