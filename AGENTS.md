@@ -65,12 +65,15 @@ GitHub Actions tests it, builds an ARM64 image tagged `sha-<first 7 chars of the
 - Follow the coding style already being used in the project
 - Always research on the version of package working on do not blindly just code.
 - Follow Designs strictly for UI.
+- Keep the "Security headers" section below and its tests up to date whenever a change touches headers, CSP, CORS, proxying or new response paths.
+- If any change requires special consideration for further changes by coding AI agents then modify this file's sections Do and Don't etc accordingly so that it preserves consistency and avoids further issues.
 
 ### Don't
 
 - Commit env secrets
 - Change any setting or app configuration without permission even if auto mode is on stop the execution with warning let me do that or command you to do it.
 - Commit or push code without my approval
+- Send any API response without the security headers, or add inline scripts, `eval`/`new Function`, or third-party hosts to the PWA (see "Security headers")
 
 ### Features
 
@@ -80,6 +83,17 @@ GitHub Actions tests it, builds an ARM64 image tagged `sha-<first 7 chars of the
 
 - No cache, intentional since 3 users max. Sessions and reset tokens are read from Postgres.
 - No queue, intentional since 3 users max. Emails are sent in the request itself.
+
+### Security headers (API and static site)
+
+Both must stay in place. Treat a missing header as a bug.
+
+- **API (`/api`)**: `helmet()` is installed in `backend/src/core/app/App.ts` before any route and before the rate limiter, so every response (success, validation error, 404, 429, 500) carries the headers. Do not mount anything ahead of it, disable it, or override its headers per route. A new kind of response path (file or stream responses, a different middleware chain, another app mounted beside it) must be added to `backend/tests/integration/security-headers.test.ts`.
+- **Static PWA**: nginx on the Pi sends the headers, from `/etc/nginx/snippets/pivault-security-headers.conf`, included in the `/`, `/index.html` and `/sw.js` locations of `/etc/nginx/sites-available/pivault`. It is not in any repo and is not deployed by CI. The policy is:
+  - CSP: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`
+  - `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, `Permissions-Policy` (camera, microphone, geolocation, payment off).
+- **Frontend rules that follow from the CSP**: no inline `<script>` or event-handler attributes, no `eval`/`new Function` in app code, no third-party scripts, fonts, images or API hosts, and the API is only called on the same origin (`/api`). If a feature genuinely needs a new source, stop and ask, because the change is made on the Pi.
+- Changing the header set means editing the Pi snippet (ask first) and updating this section in the same change.
 
 ### Tech stack
 
