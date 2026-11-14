@@ -17,8 +17,8 @@
 - Then on each app open the device will always be logged in but the app will be locked using a pin/biometric on successful app unlock we'll unwrap the vault key stored and decrypt the whole vault notes and passwords and load them. 
 
 ### Forgot password
-- Email if not exists(throw error) & if exists then request will be put to queue worker will pick up and process.
-- Worker will create a temp random token(some random string can be even a uuid/ulid) and store to cache with ttl of 15 mins and save to DB with expiry and send the link in email.
+- Email if not exists(throw error) & if exists then the request is processed right away, the UI waits for it.
+- Backend will create a temp random token(some random string can be even a uuid/ulid), save it to DB with an expiry of 15 mins and send the link in email.
 - Email will have a link to platform /reset-password?key="random token". Page will take key from url and send to backend.
 - Backend will validate the key(if not throw and show error) and then if valid send 200 to frontend which will show new password inputs and on submit send password and token the password will be set for the user for whom the token is stored against the token 
 - The key in this context is the token itself just referenced as key on the frontend.

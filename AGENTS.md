@@ -76,6 +76,11 @@ GitHub Actions tests it, builds an ARM64 image tagged `sha-<first 7 chars of the
 
 @FEATURES.md
 
+## Architecture(BACKEND)
+
+- No cache, intentional since 3 users max. Sessions and reset tokens are read from Postgres.
+- No queue, intentional since 3 users max. Emails are sent in the request itself.
+
 ### Tech stack
 
 ### Frontend (/pwa)
