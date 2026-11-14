@@ -2,7 +2,7 @@
 
 ### No register UI, I'll directly register user via a local register api.
 - Flow -> First Name, Last Name, Mobile, Email, Password -> Check duplicate -> Hash password & store in DB -> Send Welcome Email.
-- Email validation, mobile validation, password (1 to 16, A-Z, a-z, 0-9, at least a character).
+- Email validation, mobile validation, password (8 to 16 characters, A-Z, a-z, 0-9, at least one special character).
 - Email & mobile both unique
 - Online feature requires internet
 

@@ -83,6 +83,7 @@ GitHub Actions tests it, builds an ARM64 image tagged `sha-<first 7 chars of the
 
 - No cache, intentional since 3 users max. Sessions and reset tokens are read from Postgres.
 - No queue, intentional since 3 users max. Emails are sent in the request itself.
+- Account password is 8 to 16 characters (upper, lower, digit, special), intentional: the users must be able to remember it. Do not raise the maximum. The vault itself is protected by the separate recovery key (see SECURITY.md), not by this password.
 
 ### Security headers (API and static site)
 
