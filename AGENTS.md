@@ -79,7 +79,8 @@ GitHub Actions tests it, builds an ARM64 image tagged `sha-<first 7 chars of the
 ### GitGuardian
 
 - Each submodule has a `.gitguardian.yaml` that skips test files only (`tests/**`, `*.test.ts(x)`, `src/test/**`). App code, config and docs are always scanned.
-- Dummy credentials are fine in tests (use obviously fake values like `Passw0rd!`). Never put a real secret in a test: the path ignore would hide it.
+- The path ignore is not reliable on the GitHub PR check (it flagged dummy passwords in backend tests anyway). In NEW tests, do not write password-shaped literals (`password: 'Something1!'`, `const PASSWORD = '...'`): build them at runtime, e.g. `fakePassword()` in `backend/tests/helpers/passwords.ts`. Short throwaway values like `'x'` for "wrong input" cases are fine. Never put a real secret in a test: the path ignore would hide it.
+- Incidents GitGuardian already opened for dummy values must be resolved as false positives in its dashboard by the owner; code changes can't close them.
 - A fake secret outside tests (e.g. `.env.example` placeholders) gets `# ggignore` on the same line. Do not widen the ignored paths to silence a finding in real code: fix or rotate it.
 
 ### Features
