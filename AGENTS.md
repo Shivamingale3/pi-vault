@@ -140,7 +140,26 @@ Both must stay in place. Treat a missing header as a bug.
 - Decrypted data must not outlive the unlocked zone: do not copy entries into storage, caches, logs, URLs or global state outside `VaultProvider`. Sign out (and an expired session) delete the whole vault database (`removeVaultDb` in `wipeDevice`).
 - RxDB: Dexie storage only, `rxdb/plugins/core` + `storage-dexie`. Do NOT import the pipeline plugin or schema validators (`validate-ajv`, `validate-z-schema`): they use `eval` / `new Function`, which the CSP forbids. Validation is zod. Check that the production bundle has no `eval(` / `new Function(` after any RxDB change.
 - UI rules for secrets: passwords hidden until asked, copy clears the clipboard after 30s (`copySecret`), the website is only linked when `safeHttpUrl` accepts it, search never matches passwords.
-- Server side (next): the server stores and returns the encrypted envelopes only. It must never receive a key, a recovery key or plaintext, and must not parse envelope contents.
+- Server side: the server stores and returns the encrypted envelopes only. It must never receive a key, a recovery key or plaintext, and must not parse envelope contents. It never logs entry ids, ivs or ciphertext.
+
+### Vault sync (RxDB replication)
+
+- Protocol: RxDB's replication plugin (`rxdb/plugins/replication`) in `pwa/src/services/vault-sync.service.ts`, against `POST /api/vault/pull` and `/push` (signed, `no-store`, `backend/src/modules/vault`). Local writes go to RxDB first; sync is a background step and never blocks the app.
+- Table `vault_entries` (key `userId + id`): `seq`, `updatedAt`, `deleted`, and the envelope as four columns. Every write takes the next `users.vaultSeq` inside one transaction that locks the user's row (`runExclusive`), so pull checkpoints (`{ seq }`) can't miss a document. Do not replace this with client clocks or `now()` ordering.
+- Push contract: a change is accepted only if `assumedMasterState` still equals the server's state; otherwise the server's version comes back as a conflict. Re-sending an applied change is a no-op. Keep both behaviours (tested in `vault.service.test.ts` and the PWA's fake server).
+- Conflicts: last write wins on `updatedAt` (`db/vault.conflict.ts`), ties go to the server's version. The server can't merge fields (it can't read them). Deletes are tombstones, and deleted entries keep their (unreadable) blob on the server.
+- Limits (keep PWA and backend in step): one envelope format only (AES-GCM-256, 12 byte IV), ciphertext <= 90,000 base64 chars, so the app refuses entries over 60 KB of JSON (`MAX_PAYLOAD_BYTES`); pull <= 100, push <= 10 rows (the app uses 50 and 5).
+- Body size: the vault router reads its own 1 MB JSON body AFTER `requireSession` (`parsesOwnBody` on the module, skipped by the global 100 KB parser). Every other route keeps the small limit. Do not raise the global limit.
+- Session: one session per user. A 401 from sync means the session was replaced or expired: syncing stops and the user is told, but nothing is wiped automatically. Sync runs only while unlocked (`SyncProvider`), starts from the stored checkpoint, and sign out clears the totals.
+- Tracking: created / updated / deleted, sent and received, and last-synced time are kept in IndexedDB (`sync-stats.service.ts`). Own pushes echoing back are not counted as received.
+- A recovery key typed on a new device is verified against the server's vault before it is kept (`verifyAgainstServer` in `setup.service.ts`); it needs a connection.
+- Tests: sync tests use real RxDB with `test/fake-vault-server.ts`, which mirrors the backend's rules. If the server's push/pull rules change, change the fake in the same PR. Screen tests get a stubbed `startVaultSync` from `test/setup.ts`; the sync tests load the real one with `vi.importActual`.
+
+### UI design handoff
+
+- `pwa/CLAUDE.md` and `pwa/docs/design/` are the source of truth for every screen. Read the README and `components.md` first, then only the module file and screenshots for the screen. Colours come from tokens, never hex; copy is exact except "PiDrive" -> "PiVault".
+- Items under "Assumed, not drawn" in the design README need the owner's decision before they are built. Where the app has no data or feature for a drawn element, flag it in the PR instead of inventing it.
+- The recovery key in the design (16 Crockford Base32) conflicts with SECURITY.md (256-bit, 64 hex); SECURITY.md wins until the owner says otherwise.
 
 ### Dependencies and the runtime image
 
