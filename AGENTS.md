@@ -67,12 +67,13 @@ GitHub Actions tests it, builds an ARM64 image tagged `sha-<first 7 chars of the
 - Follow Designs strictly for UI.
 - Keep the "Security headers" section below and its tests up to date whenever a change touches headers, CSP, CORS, proxying or new response paths.
 - If any change requires special consideration for further changes by coding AI agents then modify this file's sections Do and Don't etc accordingly so that it preserves consistency and avoids further issues.
+- **Git workflow: commit every time.** Work on a feature branch (never directly on `main`) and commit after every logical unit of work (a service, a screen, a fix, a test file group), not one big commit at the end, so anything can be reverted on its own. Do this inside each submodule that changed. Use conventional messages (`feat:`, `fix:`, `test:`, `chore:`, `docs:`), keep each commit to one concern, run the checks before committing when the change is more than trivial, and never commit secrets or `.env` files. Push the branch and open a PR when the work is ready or when asked; merging and deploying to `live` stay with the user.
 
 ### Don't
 
 - Commit env secrets
 - Change any setting or app configuration without permission even if auto mode is on stop the execution with warning let me do that or command you to do it.
-- Commit or push code without my approval
+- Push to `live`, merge a PR, force-push, or commit straight onto `main` without my approval. (Feature branches and commits are expected, see "Git workflow" under Do.)
 - Send any API response without the security headers, or add inline scripts, `eval`/`new Function`, or third-party hosts to the PWA (see "Security headers")
 
 ### GitGuardian
@@ -109,12 +110,25 @@ Both must stay in place. Treat a missing header as a bug.
 - API (public, not under `/internal`): `POST /api/auth/password-links/validate` and `/complete`, bodies `{ token }` and `{ token, password }`. The token travels in the body only, never in a URL or query string, and is never logged. Responses are `Cache-Control: no-store`.
 - Every unknown, expired, spent or malformed token gets the same HTTP 400 with `INVALID_LINK_MESSAGE` ("This link is invalid or has expired"). The PWA matches that exact message (`pwa/src/constants/password-link.constants.ts`); change both sides together.
 - `complete` checks the token before hashing (a bad token must never cost an argon2 hash), then in ONE transaction deletes the token (compare-and-delete, so it is single-use even under races), sets the password hash and `passwordChangedAt`, sets `emailVerifiedAt` if empty, and deletes the user's session. Keep that atomic: it lives in `PrismaPasswordResetRepository.consumeToSetPassword`.
-- **Login (not built yet) MUST refuse users whose `emailVerifiedAt` is null.**
+- Login refuses users whose `emailVerifiedAt` is null (403, only after the password was right). Keep it that way.
 - The password policy has one backend source, `backend/src/modules/user/password.schema.ts`, mirrored in `pwa/src/utils/password-rules.utils.ts`. Do not duplicate it elsewhere.
 - The PWA strips `?key=` from the address bar right after reading it and keeps the token in memory only. Never store it in storage or caches.
 - Rate limits: `PASSWORD_LINK_VALIDATE` and `PASSWORD_LINK_COMPLETE` in `ratelimits.constants.ts`. New public paths belong in `security-headers.test.ts`.
 - Expired tokens are swept whenever a new token is issued (no scheduler, by design).
 - The Pi nginx must serve `/reset-password` with the SPA fallback and must not block `/api/auth/*` (only `/api/internal/*` is blocked). Verify after deploy; changing it is a Pi change, ask first.
+
+### Login, sessions and signed requests
+
+- Public: `POST /api/auth/login` `{ email, password, publicKey }` and `POST /api/auth/forgot-password` `{ email }`. Signed: `POST /api/auth/logout` and `POST /api/auth/recovery-key-configured` (idempotent; records that the device made its recovery key, which is what makes a later login report `recoveryKeyConfigured: true`). All `no-store`, rate limited (`LOGIN`, `FORGOT_PASSWORD`), listed in `security-headers.test.ts`.
+- `publicKey` is the device's ECDSA P-256 public key as **SPKI DER, base64url** (the PWA's `exportPublicKey` must emit base64url, not plain base64). Anything else is a 400. Login returns `{ token, expiresAt, user, recoveryKeyConfigured }`; the raw token is shown once and only its SHA-256 is stored. One user, one session: a new login replaces the old one.
+- Wrong password and unknown email give the same 401 (`INVALID_CREDENTIALS_MESSAGE`) and both pay one argon2 verify. Per-account brake: 5 failures per 15 min then 429 (`LoginThrottle`, in memory by design, on top of the per-IP limit). Never log passwords or tokens.
+- Authenticated requests send `Authorization: Bearer <token>`, `X-Timestamp` (ms epoch, within 60s of the server) and `X-Signature`: base64url raw r||s ECDSA-SHA256 over `"<timestamp>.<METHOD>.<path without query>"` (`signaturePayload` in `session.constants.ts`), signed with the non-extractable device key. Guard: `SessionAuthGuard`; every failure is the same 401. New protected routes use `requireSession` and read the user with `authOf(res)`. Request bodies are not signed yet; revisit when sync endpoints arrive.
+- PWA side: signed calls go through `pwa/src/services/signed-api.client.ts` (`postSigned`); its payload format is mirrored in `pwa/src/constants/auth.constants.ts`, so change both sides together. Auth state is the `AuthStatus` machine (`logged-out -> needs-setup -> locked -> unlocked`); every screen sits behind a `ZoneGuard` zone in `routes/app.routes.tsx`.
+- Device storage is plain IndexedDB (`pwa/src/db/idb.ts`, stores `keys` and `auth`), because `CryptoKey`s need structured clone. Keys are always non-extractable; never store a recovery key, raw key bytes or the PIN. The PIN is a salted PBKDF2 hash with a lockout, and is only a UI gate (it does not encrypt anything).
+- Sign out wipes everything on the device (session, device key, vault key, PIN) after a best-effort server logout, so the next login asks for the recovery key again. Setup order on first login: PIN, then recovery key; the server is told about the key before it is stored locally.
+- Lock screen: the PIN unlocks on the sixth digit (`unlockWithPin`), biometric unlock is a WebAuthn `get()` with user verification (`unlockWithBiometric`), and both only load the saved non-extractable vault key into `secure-memory.service` (memory only). 5 wrong PINs start a growing lockout. A missing vault key or PIN record signs the user out with a message. The unlocked zone locks itself after 60s in the background (`useAutoLock`). A session past `expiresAt` is wiped at startup.
+- Known gap: a recovery key typed on a new device can't be verified until the vault exists. The first vault download must verify it (decrypt) and, on failure, ask for the key again.
+- Forgot-password intentionally tells the caller when the email is unknown (FEATURES.md, a handful of known users). Do not "fix" that without asking.
 
 ### Dependencies and the runtime image
 
