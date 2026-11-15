@@ -131,6 +131,17 @@ Both must stay in place. Treat a missing header as a bug.
 - Known gap: a recovery key typed on a new device can't be verified until the vault exists. The first vault download must verify it (decrypt) and, on failure, ask for the key again.
 - Forgot-password intentionally tells the caller when the email is unknown (FEATURES.md, a handful of known users). Do not "fix" that without asking.
 
+### Vault data (notes and passwords)
+
+- Flow: type -> zod validate -> encrypt -> RxDB on the device -> (later) sync. Code: `pwa/src/services/vault.service.ts` (seal/open, CRUD, `watchEntries`), `pwa/src/db/` (RxDB, Dexie storage), `VaultProvider` (decrypted entries, in memory only, inside the unlocked zone).
+- **One key, one blob per entry** (AES-256-GCM, fresh 12-byte IV per write). SECURITY.md's "one encrypted payload" is read as "one key, no hierarchy": per-entry blobs are needed for sync and per-item counts. Do not add per-record keys or a key hierarchy.
+- A stored document is ONLY `{ id (ULID), updatedAt, envelope }`. Title, username, password, url, notes and the entry `kind` live inside the ciphertext. Never add a plaintext field that carries user content (it would also reach the server). `updatedAt` and the id are the only metadata.
+- The id is bound to its blob as AES-GCM additional data (`ENTRY_AAD_PREFIX`), so a blob moved to another record fails to decrypt. Keep passing `aad` for every entry encrypt/decrypt. Entries that fail to decrypt are hidden and counted, never shown.
+- Decrypted data must not outlive the unlocked zone: do not copy entries into storage, caches, logs, URLs or global state outside `VaultProvider`. Sign out (and an expired session) delete the whole vault database (`removeVaultDb` in `wipeDevice`).
+- RxDB: Dexie storage only, `rxdb/plugins/core` + `storage-dexie`. Do NOT import the pipeline plugin or schema validators (`validate-ajv`, `validate-z-schema`): they use `eval` / `new Function`, which the CSP forbids. Validation is zod. Check that the production bundle has no `eval(` / `new Function(` after any RxDB change.
+- UI rules for secrets: passwords hidden until asked, copy clears the clipboard after 30s (`copySecret`), the website is only linked when `safeHttpUrl` accepts it, search never matches passwords.
+- Server side (next): the server stores and returns the encrypted envelopes only. It must never receive a key, a recovery key or plaintext, and must not parse envelope contents.
+
 ### Dependencies and the runtime image
 
 - `npm audit --omit=dev` must stay at 0 in both `backend/` and `pwa/`. Dev-only findings whose only suggested fix is a downgrade (typescript-eslint/minimatch, workbox-build, the shadcn CLI) are accepted.
