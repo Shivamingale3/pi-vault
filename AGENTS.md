@@ -160,6 +160,15 @@ Both must stay in place. Treat a missing header as a bug.
 - `pwa/CLAUDE.md` and `pwa/docs/design/` are the source of truth for every screen. Read the README and `components.md` first, then only the module file and screenshots for the screen. Colours come from tokens, never hex; copy is exact except "PiDrive" -> "PiVault".
 - Items under "Assumed, not drawn" in the design README need the owner's decision before they are built. Where the app has no data or feature for a drawn element, flag it in the PR instead of inventing it.
 - The recovery key in the design (16 Crockford Base32) conflicts with SECURITY.md (256-bit, 64 hex); SECURITY.md wins until the owner says otherwise.
+- Owner overrides of the design (keep them):
+  - Follow the design for colours, borders, spacing and layout, NOT for its wording. No technical lines in the UI (encryption, storage, server, sessions, "VAULT UNLOCKED" and the like): the users are family, not engineers. Write plain, short copy.
+  - The only status shown about an item is whether it is synced ("Synced" / "Not synced yet", a dot on list rows), from `synced-state.service.ts` (`id -> updatedAt` the server holds; ids and times only).
+  - No bottom tab bar. Home's cards open Passwords and Notes; the user's initial (`UserAvatar`) opens Settings.
+  - Say "biometrics" (fingerprint or face), never "Face ID". `BiometricIcon` picks the icon.
+  - Every screen fills the full height and width (`min-h-full w-full` on the page's `main`); never leave a screen at its content height.
+  - Back buttons go back (`useBack` / `BackButton`), like the phone's back button; never push a new screen to go "back". Saves and deletes that leave a screen go back too.
+  - The note editor is header, title, formatting toolbar, then the body filling the rest and scrolling inside itself.
+  - About shows the app version (`APP_VERSION`, from package.json plus the CI commit) so two phones can be compared. Bump `version` in `pwa/package.json` for a release users should notice.
 
 ### Dependencies and the runtime image
 
